@@ -5,3 +5,5 @@ uploads/
 dist/
 build/
 .DS_Store
+Dockerfile
+docker-compose.yml
