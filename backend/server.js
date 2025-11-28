@@ -57,13 +57,13 @@ const upload = multer({
 // Cleanup expired sessions and files
 setInterval(() => {
   const now = Date.now();
-  
+
   for (const [token, session] of sessions.entries()) {
     if (session.expiresAt < now) {
       sessions.delete(token);
     }
   }
-  
+
   for (const [jobId, job] of jobs.entries()) {
     if (job.expiresAt < now) {
       try {
@@ -89,12 +89,12 @@ app.post('/api/sessions', async (req, res) => {
     const { shopId } = req.body;
     const token = randomBytes(10).toString('hex');
     const expiresAt = Date.now() + SESSION_TTL_MIN * 60 * 1000;
-    
+
     sessions.set(token, { shopId, expiresAt, createdAt: Date.now() });
-    
+
     const uploadUrl = `${PUBLIC_URL}/upload/${token}`;
     const qrDataUrl = await QRCode.toDataURL(uploadUrl);
-    
+
     res.json({ token, uploadUrl, qrDataUrl, expiresAt });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -102,20 +102,23 @@ app.post('/api/sessions', async (req, res) => {
 });
 
 // Upload file
+app.get("/",(req, res)=>{
+  res.send("Backend is running");
+})
 app.post('/api/upload/:token', upload.single('file'), (req, res) => {
   try {
     const { token } = req.params;
     const session = sessions.get(token);
-    
+
     if (!session) {
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Session not found or expired' });
     }
-    
+
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    
+
     const jobId = randomBytes(16).toString('hex');
     const job = {
       jobId,
@@ -127,9 +130,9 @@ app.post('/api/upload/:token', upload.single('file'), (req, res) => {
       uploadedAt: Date.now(),
       expiresAt: Date.now() + FILE_TTL_HOURS * 60 * 60 * 1000
     };
-    
+
     jobs.set(jobId, job);
-    
+
     res.json({ jobId, filename: job.filename, size: job.size });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -141,17 +144,17 @@ app.get('/api/jobs/:token', (req, res) => {
   try {
     const { token } = req.params;
     const session = sessions.get(token);
-    
+
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
-    
+
     const sessionJobs = Array.from(jobs.values())
       .filter(job => job.token === token)
       .map(({ jobId, filename, size, uploadedAt }) => ({
         jobId, filename, size, uploadedAt
       }));
-    
+
     res.json({ jobs: sessionJobs, expiresAt: session.expiresAt });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -163,16 +166,16 @@ app.get('/api/files/:jobId', (req, res) => {
   try {
     const { jobId } = req.params;
     const job = jobs.get(jobId);
-    
+
     if (!job) {
       return res.status(404).json({ error: 'File not found' });
     }
-    
+
     if (!fs.existsSync(job.filePath)) {
       jobs.delete(jobId);
       return res.status(404).json({ error: 'File no longer exists' });
     }
-    
+
     res.download(job.filePath, job.filename);
   } catch (err) {
     res.status(500).json({ error: err.message });
