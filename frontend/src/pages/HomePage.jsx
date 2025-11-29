@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './HomePage.css';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = "https://qr-file-sharing-2757.vercel.app";
 
 const HomePage = () => {
   const [qrData, setQrData] = useState(null);

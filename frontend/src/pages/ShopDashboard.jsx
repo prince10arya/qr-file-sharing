@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = 'https://qr-file-sharing-2757.vercel.app';
 
 const ShopDashboard = () => {
   const { token } = useParams();
@@ -42,7 +42,7 @@ const ShopDashboard = () => {
     <div style={styles.container}>
       <div style={styles.card}>
         <h1 style={styles.title}>🏬 Shop Dashboard</h1>
-        
+
         {expiresAt && (
           <div style={styles.timer}>
             ⏱ Session expires in: <strong>{timeRemaining} minutes</strong>
@@ -68,7 +68,7 @@ const ShopDashboard = () => {
                   <div style={styles.jobInfo}>
                     <div style={styles.filename}>📄 {job.filename}</div>
                     <div style={styles.meta}>
-                      {(job.size / 1024 / 1024).toFixed(2)} MB • 
+                      {(job.size / 1024 / 1024).toFixed(2)} MB •
                       {new Date(job.uploadedAt).toLocaleTimeString()}
                     </div>
                   </div>
