@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import './ShopDashboard.css';
 
-const API_URL = "hhttps://qr-file-sharing-2757.vercel.app";
+const API_URL = "https://qr-file-sharing-2757.vercel.app";
 
 const ShopDashboard = () => {
   const { token } = useParams();
