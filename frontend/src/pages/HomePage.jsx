@@ -29,9 +29,9 @@ const HomePage = () => {
       <div className="hero-section">
         <div className="hero-content">
           <div className="logo-large">📱</div>
-          <h1>QR Print System</h1>
+          <h1>QR Share</h1>
           <p className="tagline">Fast, secure file sharing for print shops</p>
-          
+
           <div className="features-grid">
             <div className="feature-card">
               <div className="feature-icon">⚡</div>
@@ -60,7 +60,7 @@ const HomePage = () => {
                 <h2>✅ Session Created!</h2>
                 <img src={qrData.qrDataUrl} alt="QR Code" className="qr-image" />
                 <p className="qr-instruction">Show this QR code to customers</p>
-                
+
                 <div className="links-section">
                   <div className="link-item">
                     <span className="link-label">📤 Upload URL:</span>
