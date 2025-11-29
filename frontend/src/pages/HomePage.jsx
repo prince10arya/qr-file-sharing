@@ -47,32 +47,53 @@ const HomePage = () => {
           </div>
 
           {!qrData ? (
-            <button onClick={createSession} disabled={loading} className="cta-button">
-              {loading ? '⏳ Creating...' : '🚀 Generate QR Code'}
+            <button
+              onClick={createSession}
+              disabled={loading}
+              className="cta-button"
+            >
+              {loading ? "⏳ Creating..." : "🚀 Generate QR Code"}
             </button>
           ) : (
             <div className="qr-result">
               <div className="qr-card">
                 <h2>✅ Session Created!</h2>
-                <img src={qrData.qrDataUrl} alt="QR Code" className="qr-image" />
+                <img
+                  src={qrData.qrDataUrl}
+                  alt="QR Code"
+                  className="qr-image"
+                />
                 <p className="qr-instruction">Show this QR code to customers</p>
 
                 <div className="links-section">
                   <div className="link-item">
                     <span className="link-label">📤 Upload URL:</span>
-                    <a href={qrData.uploadUrl} target="_blank" rel="noopener noreferrer" className="link-url">
+                    <a
+                      href={qrData.uploadUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="link-url"
+                    >
                       {qrData.uploadUrl}
                     </a>
                   </div>
                   <div className="link-item">
                     <span className="link-label">🏬 Dashboard:</span>
-                    <a href={`http://localhost:5173/shop/${qrData.token}`} target="_blank" rel="noopener noreferrer" className="link-url">
+                    <a
+                      href={`https://qr-file-sharing.vercel.app/shop/${qrData.token}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="link-url"
+                    >
                       Open Dashboard
                     </a>
                   </div>
                 </div>
 
-                <button onClick={() => setQrData(null)} className="new-session-btn">
+                <button
+                  onClick={() => setQrData(null)}
+                  className="new-session-btn"
+                >
                   Create New Session
                 </button>
               </div>
