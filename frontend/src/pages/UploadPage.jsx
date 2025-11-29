@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = "https://qr-file-sharing-2757.vercel.app";
 
 const UploadPage = () => {
   const { token } = useParams();
