@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
+import axios from 'axios';
+import './UploadPage.css';
 
 const API_URL = "https://qr-file-sharing-2757.vercel.app";
 
@@ -20,21 +22,12 @@ const UploadPage = () => {
     formData.append('file', file);
 
     try {
-      const res = await fetch(`${API_URL}/api/upload/${token}`, {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setMessage(`✅ File uploaded: ${data.filename}`);
-        setFile(null);
-      } else {
-        setMessage(`❌ Error: ${data.error}`);
-      }
+      const { data } = await axios.post(`${API_URL}/api/upload/${token}`, formData);
+      setMessage(`✅ ${data.filename} uploaded successfully!`);
+      setFile(null);
+      setTimeout(() => setMessage(''), 5000);
     } catch (err) {
-      setMessage(`❌ Upload failed: ${err.message}`);
+      setMessage(`❌ ${err.response?.data?.error || 'Upload failed. Please try again.'}`);
     } finally {
       setUploading(false);
     }

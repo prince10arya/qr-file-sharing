@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import axios from 'axios';
 import './HomePage.css';
 
-const API_URL = "https://qr-file-sharing-2757.vercel.app";
+const API_URL = 'http://localhost:3000';
 
 const HomePage = () => {
   const [qrData, setQrData] = useState(null);
@@ -10,12 +11,7 @@ const HomePage = () => {
   const createSession = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopId: 'shop-1' })
-      });
-      const data = await res.json();
+      const { data } = await axios.post(`${API_URL}/api/sessions`, { shopId: 'shop-1' });
       setQrData(data);
     } catch (err) {
       alert('Failed to create session');

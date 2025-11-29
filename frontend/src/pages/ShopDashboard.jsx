@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import axios from 'axios';
+import './ShopDashboard.css';
 
-const API_URL = 'https://qr-file-sharing-2757.vercel.app';
+const API_URL = 'http://localhost:3000';
 
 const ShopDashboard = () => {
   const { token } = useParams();
@@ -11,18 +13,12 @@ const ShopDashboard = () => {
 
   const fetchJobs = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/jobs/${token}`);
-      const data = await res.json();
-
-      if (res.ok) {
-        setJobs(data.jobs);
-        setExpiresAt(data.expiresAt);
-        setError('');
-      } else {
-        setError(data.error);
-      }
+      const { data } = await axios.get(`${API_URL}/api/jobs/${token}`);
+      setJobs(data.jobs);
+      setExpiresAt(data.expiresAt);
+      setError('');
     } catch (err) {
-      setError('Failed to fetch jobs');
+      setError(err.response?.data?.error || 'Failed to fetch jobs');
     }
   };
 
