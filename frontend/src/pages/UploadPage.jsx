@@ -57,6 +57,9 @@ const UploadPage = () => {
       <div style={styles.card}>
         <h1 style={styles.title}>📄 Upload Your File</h1>
         <p style={styles.subtitle}>Select a PDF, image, or document to upload</p>
+        <div style={styles.warning}>
+          ⚠️ Files are automatically deleted after 10 minutes
+        </div>
 
         <form onSubmit={handleUpload} style={styles.form}>
           <input
@@ -135,8 +138,18 @@ const styles = {
     color: '#333'
   },
   subtitle: {
-    margin: '0 0 2rem 0',
+    margin: '0 0 1rem 0',
     color: '#666'
+  },
+  warning: {
+    padding: '0.75rem',
+    background: '#fff3cd',
+    border: '1px solid #ffc107',
+    borderRadius: '6px',
+    color: '#856404',
+    fontSize: '0.9rem',
+    marginBottom: '1.5rem',
+    textAlign: 'center'
   },
   form: {
     display: 'flex',

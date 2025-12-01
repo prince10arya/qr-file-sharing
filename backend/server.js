@@ -17,6 +17,7 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_URL = process.env.PUBLIC_URL || 'http://localhost:5173';
 const SESSION_TTL_MIN = parseInt(process.env.SESSION_TTL_MIN || '30');
 const FILE_TTL_HOURS = parseInt(process.env.FILE_TTL_HOURS || '24');
+const FILE_DELETE_MIN = parseInt(process.env.FILE_DELETE_MIN || '10');
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE_BYTES || '52428800');
 const REDIS_URL = process.env.REDIS_URL;
 
@@ -128,6 +129,7 @@ app.post('/api/upload/:token', upload.single('file'), async (req, res) => {
 
     const session = JSON.parse(sessionData);
     const jobId = randomBytes(16).toString('hex');
+    const deleteAt = Date.now() + FILE_DELETE_MIN * 60 * 1000;
     const job = {
       jobId,
       token,
@@ -136,12 +138,14 @@ app.post('/api/upload/:token', upload.single('file'), async (req, res) => {
       s3Key: req.file.key,
       size: req.file.size,
       uploadedAt: Date.now(),
+      deleteAt,
       expiresAt: Date.now() + FILE_TTL_HOURS * 60 * 60 * 1000
     };
 
     await redis.setEx(`job:${jobId}`, FILE_TTL_HOURS * 60 * 60, JSON.stringify(job));
     await redis.sAdd(`session:${token}:jobs`, jobId);
     await redis.expire(`session:${token}:jobs`, FILE_TTL_HOURS * 60 * 60);
+    await redis.zAdd('files:cleanup', { score: deleteAt, value: jobId });
 
     res.json({ jobId, filename: job.filename, size: job.size });
   } catch (err) {
@@ -197,6 +201,43 @@ app.get('/api/files/:jobId', async (req, res) => {
   }
 });
 
+// Cleanup job - runs every minute
+setInterval(async () => {
+  try {
+    const now = Date.now();
+    const expiredJobs = await redis.zRangeByScore('files:cleanup', 0, now);
+    
+    for (const jobId of expiredJobs) {
+      const jobData = await redis.get(`job:${jobId}`);
+      if (jobData) {
+        const job = JSON.parse(jobData);
+        
+        // Delete from S3
+        try {
+          await s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: job.s3Key }));
+          console.log(`Deleted file from S3: ${job.s3Key}`);
+        } catch (err) {
+          console.error(`Failed to delete S3 file: ${job.s3Key}`, err);
+        }
+        
+        // Remove from Redis
+        await redis.del(`job:${jobId}`);
+        await redis.zRem('files:cleanup', jobId);
+      } else {
+        // Job already deleted, just remove from cleanup queue
+        await redis.zRem('files:cleanup', jobId);
+      }
+    }
+    
+    if (expiredJobs.length > 0) {
+      console.log(`Cleaned up ${expiredJobs.length} expired files`);
+    }
+  } catch (err) {
+    console.error('Cleanup job error:', err);
+  }
+}, 60000); // Run every 60 seconds
+
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
+  console.log(`Files will be auto-deleted after ${FILE_DELETE_MIN} minutes`);
 });
