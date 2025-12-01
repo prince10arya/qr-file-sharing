@@ -16,6 +16,12 @@ const UploadPage = () => {
     e.preventDefault();
     if (!file) return;
 
+    // Warn for files larger than 4MB due to Vercel limits
+    if (file.size > 4 * 1024 * 1024) {
+      setMessage('⚠️ Files larger than 4MB may fail due to server limitations. Please try a smaller file.');
+      return;
+    }
+
     setUploading(true);
     setMessage('');
     setProgress(0);
@@ -61,9 +67,17 @@ const UploadPage = () => {
           />
 
           {file && (
-            <div style={styles.fileInfo}>
+            <div style={{
+              ...styles.fileInfo,
+              ...(file.size > 4 * 1024 * 1024 && { background: '#fff3cd', border: '1px solid #ffc107' })
+            }}>
               <strong>{file.name}</strong>
               <span> ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+              {file.size > 4 * 1024 * 1024 && (
+                <div style={{ color: '#856404', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                  ⚠️ File may be too large for upload
+                </div>
+              )}
             </div>
           )}
 
