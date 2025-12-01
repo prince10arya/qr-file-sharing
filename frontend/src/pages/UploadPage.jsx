@@ -10,6 +10,7 @@ const UploadPage = () => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
+  const [progress, setProgress] = useState(0);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -17,6 +18,7 @@ const UploadPage = () => {
 
     setUploading(true);
     setMessage('');
+    setProgress(0);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -26,13 +28,19 @@ const UploadPage = () => {
         headers: {
           'Content-Type': 'multipart/form-data'
         },
-        timeout: 60000
+        timeout: 300000,
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setProgress(percentCompleted);
+        }
       });
       setMessage(`✅ ${data.filename} uploaded successfully!`);
       setFile(null);
+      setProgress(0);
       setTimeout(() => setMessage(''), 5000);
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.error || 'Upload failed. Please try again.'}`);
+      setProgress(0);
     } finally {
       setUploading(false);
     }
@@ -67,8 +75,14 @@ const UploadPage = () => {
               ...((!file || uploading) && styles.buttonDisabled)
             }}
           >
-            {uploading ? '⏳ Uploading...' : '📤 Upload File'}
+            {uploading ? `⏳ Uploading... ${progress}%` : '📤 Upload File'}
           </button>
+
+          {uploading && progress > 0 && (
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+            </div>
+          )}
         </form>
 
         {message && (
@@ -155,6 +169,18 @@ const styles = {
   error: {
     background: '#f8d7da',
     color: '#721c24'
+  },
+  progressBar: {
+    width: '100%',
+    height: '8px',
+    background: '#e0e0e0',
+    borderRadius: '4px',
+    overflow: 'hidden'
+  },
+  progressFill: {
+    height: '100%',
+    background: '#667eea',
+    transition: 'width 0.3s ease'
   }
 };
 
