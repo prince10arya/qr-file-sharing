@@ -22,7 +22,12 @@ const UploadPage = () => {
     formData.append('file', file);
 
     try {
-      const { data } = await axios.post(`${API_URL}/api/upload/${token}`, formData);
+      const { data } = await axios.post(`${API_URL}/api/upload/${token}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        timeout: 60000
+      });
       setMessage(`✅ ${data.filename} uploaded successfully!`);
       setFile(null);
       setTimeout(() => setMessage(''), 5000);
@@ -42,7 +47,7 @@ const UploadPage = () => {
         <form onSubmit={handleUpload} style={styles.form}>
           <input
             type="file"
-            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+            accept="application/pdf,image/png,image/jpeg,image/jpg,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(e) => setFile(e.target.files[0])}
             style={styles.fileInput}
           />

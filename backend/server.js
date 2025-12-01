@@ -45,6 +45,7 @@ const upload = multer({
   storage: multerS3({
     s3: s3Client,
     bucket: S3_BUCKET,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
     metadata: (req, file, cb) => {
       cb(null, { fieldName: file.fieldname });
     },
@@ -54,8 +55,24 @@ const upload = multer({
     }
   }),
   fileFilter: (req, file, cb) => {
-    const allowed = /\.(pdf|png|jpg|jpeg|doc|docx)$/i;
-    cb(null, allowed.test(file.originalname));
+    const allowedExtensions = /\.(pdf|png|jpg|jpeg|doc|docx)$/i;
+    const allowedMimeTypes = [
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    
+    const hasValidExtension = allowedExtensions.test(file.originalname);
+    const hasValidMimeType = allowedMimeTypes.includes(file.mimetype);
+    
+    if (hasValidExtension || hasValidMimeType) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type'));
+    }
   },
   limits: { fileSize: MAX_FILE_SIZE }
 });
