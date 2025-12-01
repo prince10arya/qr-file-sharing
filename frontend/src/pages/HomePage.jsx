@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import axios from 'axios';
 import './HomePage.css';
 
@@ -7,18 +7,23 @@ const API_URL = "https://qr-file-sharing-2757.vercel.app";
 const HomePage = () => {
   const [qrData, setQrData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const createSession = async () => {
+  const createSession = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const { data } = await axios.post(`${API_URL}/api/sessions`, { shopId: 'shop-1' });
+      const { data } = await axios.post(`${API_URL}/api/sessions`, 
+        { shopId: 'shop-1' },
+        { timeout: 10000 }
+      );
       setQrData(data);
     } catch (err) {
-      alert('Failed to create session');
+      setError(err.response?.data?.error || 'Failed to create session');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   return (
     <div className="home-page">
@@ -45,6 +50,12 @@ const HomePage = () => {
               <p>PDF, images, DOC, DOCX</p>
             </div>
           </div>
+
+          {error && (
+            <div style={{ padding: '1rem', background: '#f8d7da', color: '#721c24', borderRadius: '8px', marginBottom: '1rem' }}>
+              {error}
+            </div>
+          )}
 
           {!qrData ? (
             <button

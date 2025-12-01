@@ -1,14 +1,32 @@
 import express from 'express';
-import multer from 'multer';
-import multerS3 from 'multer-s3';
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
+import compression from 'compression';
+import helmet from 'helmet';
 import cors from 'cors';
-import QRCode from 'qrcode';
-import { randomBytes } from 'crypto';
 import dotenv from 'dotenv';
 import { createClient } from 'redis';
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
+
+// Middleware
+import { rateLimiter } from './middleware/rateLimiter.js';
+import { createUploadMiddleware } from './middleware/upload.js';
+
+// Models
+import { Session } from './models/Session.js';
+import { Job } from './models/Job.js';
+import { QRCache } from './models/QRCache.js';
+import { SignedURLCache } from './models/SignedURLCache.js';
+
+// Controllers
+import { createSessionController } from './controllers/sessionController.js';
+import { uploadFileController } from './controllers/uploadController.js';
+import { getJobsController } from './controllers/jobController.js';
+import { downloadFileController } from './controllers/fileController.js';
+
+// Routes
+import { createSessionRoutes } from './routes/sessionRoutes.js';
+import { createUploadRoutes } from './routes/uploadRoutes.js';
+import { createJobRoutes } from './routes/jobRoutes.js';
+import { createFileRoutes } from './routes/fileRoutes.js';
 
 dotenv.config();
 
@@ -20,6 +38,7 @@ const FILE_TTL_HOURS = parseInt(process.env.FILE_TTL_HOURS || '24');
 const FILE_DELETE_MIN = parseInt(process.env.FILE_DELETE_MIN || '10');
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE_BYTES || '52428800');
 const REDIS_URL = process.env.REDIS_URL;
+const S3_BUCKET = process.env.S3_BUCKET;
 
 // AWS S3 Configuration
 const s3Client = new S3Client({
@@ -29,7 +48,6 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
   }
 });
-const S3_BUCKET = process.env.S3_BUCKET;
 
 // Redis client
 const redis = createClient({ url: REDIS_URL });
@@ -37,195 +55,55 @@ redis.on('error', (err) => console.error('Redis error:', err));
 await redis.connect();
 console.log('Redis connected');
 
-// Middleware
+// Initialize Models
+const sessionModel = new Session(redis, SESSION_TTL_MIN);
+const jobModel = new Job(redis, FILE_TTL_HOURS, FILE_DELETE_MIN);
+const qrCache = new QRCache(redis);
+const signedURLCache = new SignedURLCache(redis);
+
+// Initialize Middleware
+const uploadMiddleware = createUploadMiddleware(s3Client, S3_BUCKET, MAX_FILE_SIZE);
+
+// Initialize Controllers
+const sessionController = createSessionController(sessionModel, qrCache, PUBLIC_URL);
+const uploadController = uploadFileController(sessionModel, jobModel, s3Client, S3_BUCKET);
+const jobController = getJobsController(jobModel);
+const fileController = downloadFileController(jobModel, signedURLCache, s3Client, S3_BUCKET);
+
+// App Middleware
+app.use(helmet());
+app.use(compression());
 app.use(cors());
-app.use(express.json());
-app.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
-
-// Multer S3 configuration
-const upload = multer({
-  storage: multerS3({
-    s3: s3Client,
-    bucket: S3_BUCKET,
-    contentType: multerS3.AUTO_CONTENT_TYPE,
-    acl: 'private',
-    metadata: (req, file, cb) => {
-      cb(null, { fieldName: file.fieldname });
-    },
-    key: (req, file, cb) => {
-      const uniqueName = `${Date.now()}-${randomBytes(8).toString('hex')}-${file.originalname}`;
-      cb(null, uniqueName);
-    }
-  }),
-  fileFilter: (req, file, cb) => {
-    const allowedExtensions = /\.(pdf|png|jpg|jpeg|doc|docx)$/i;
-    const allowedMimeTypes = [
-      'application/pdf',
-      'image/png',
-      'image/jpeg',
-      'image/jpg',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    
-    const hasValidExtension = allowedExtensions.test(file.originalname);
-    const hasValidMimeType = allowedMimeTypes.includes(file.mimetype);
-    
-    if (hasValidExtension || hasValidMimeType) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type'));
-    }
-  },
-  limits: { 
-    fileSize: MAX_FILE_SIZE
-  }
-});
-
-
+app.use(express.json({ limit: '10mb' }));
+app.use(rateLimiter(redis));
 
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
-});
+app.get('/', (req, res) => res.send('Backend is running'));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
 
-// Create session
-app.post('/api/sessions', async (req, res) => {
-  try {
-    const { shopId } = req.body;
-    const token = randomBytes(10).toString('hex');
-    const expiresAt = Date.now() + SESSION_TTL_MIN * 60 * 1000;
-
-    await redis.setEx(`session:${token}`, SESSION_TTL_MIN * 60, JSON.stringify({ shopId, expiresAt, createdAt: Date.now() }));
-
-    const uploadUrl = `${PUBLIC_URL}/upload/${token}`;
-    const qrDataUrl = await QRCode.toDataURL(uploadUrl);
-
-    res.json({ token, uploadUrl, qrDataUrl, expiresAt });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Upload file
-app.get("/",(req, res)=>{
-  res.send("Backend is running");
-})
-app.post('/api/upload/:token', upload.single('file'), async (req, res) => {
-  try {
-    const { token } = req.params;
-    const sessionData = await redis.get(`session:${token}`);
-
-    if (!sessionData) {
-      if (req.file) {
-        await s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: req.file.key }));
-      }
-      return res.status(404).json({ error: 'Session not found or expired' });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const session = JSON.parse(sessionData);
-    const jobId = randomBytes(16).toString('hex');
-    const deleteAt = Date.now() + FILE_DELETE_MIN * 60 * 1000;
-    const job = {
-      jobId,
-      token,
-      shopId: session.shopId,
-      filename: req.file.originalname,
-      s3Key: req.file.key,
-      size: req.file.size,
-      uploadedAt: Date.now(),
-      deleteAt,
-      expiresAt: Date.now() + FILE_TTL_HOURS * 60 * 60 * 1000
-    };
-
-    await redis.setEx(`job:${jobId}`, FILE_TTL_HOURS * 60 * 60, JSON.stringify(job));
-    await redis.sAdd(`session:${token}:jobs`, jobId);
-    await redis.expire(`session:${token}:jobs`, FILE_TTL_HOURS * 60 * 60);
-    await redis.zAdd('files:cleanup', { score: deleteAt, value: jobId });
-
-    res.json({ jobId, filename: job.filename, size: job.size });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get jobs for session
-app.get('/api/jobs/:token', async (req, res) => {
-  try {
-    const { token } = req.params;
-    const sessionData = await redis.get(`session:${token}`);
-
-    if (!sessionData) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-
-    const session = JSON.parse(sessionData);
-    const jobIds = await redis.sMembers(`session:${token}:jobs`);
-    const sessionJobs = [];
-
-    for (const jobId of jobIds) {
-      const jobData = await redis.get(`job:${jobId}`);
-      if (jobData) {
-        const job = JSON.parse(jobData);
-        sessionJobs.push({ jobId: job.jobId, filename: job.filename, size: job.size, uploadedAt: job.uploadedAt });
-      }
-    }
-
-    res.json({ jobs: sessionJobs, expiresAt: session.expiresAt });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Download file
-app.get('/api/files/:jobId', async (req, res) => {
-  try {
-    const { jobId } = req.params;
-    const jobData = await redis.get(`job:${jobId}`);
-
-    if (!jobData) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    const job = JSON.parse(jobData);
-    const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: job.s3Key });
-    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-
-    res.redirect(signedUrl);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// API Routes
+app.use('/api', createSessionRoutes(sessionController));
+app.use('/api', createUploadRoutes(uploadController, uploadMiddleware));
+app.use('/api', createJobRoutes(jobController));
+app.use('/api', createFileRoutes(fileController));
 
 // Cleanup job - runs every minute
 setInterval(async () => {
   try {
-    const now = Date.now();
-    const expiredJobs = await redis.zRangeByScore('files:cleanup', 0, now);
+    const expiredJobs = await jobModel.getExpired();
     
     for (const jobId of expiredJobs) {
-      const jobData = await redis.get(`job:${jobId}`);
-      if (jobData) {
-        const job = JSON.parse(jobData);
-        
-        // Delete from S3
+      const job = await jobModel.get(jobId);
+      if (job) {
         try {
           await s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: job.s3Key }));
           console.log(`Deleted file from S3: ${job.s3Key}`);
         } catch (err) {
           console.error(`Failed to delete S3 file: ${job.s3Key}`, err);
         }
-        
-        // Remove from Redis
-        await redis.del(`job:${jobId}`);
-        await redis.zRem('files:cleanup', jobId);
+        await jobModel.delete(jobId);
       } else {
-        // Job already deleted, just remove from cleanup queue
-        await redis.zRem('files:cleanup', jobId);
+        await jobModel.delete(jobId);
       }
     }
     
@@ -235,7 +113,7 @@ setInterval(async () => {
   } catch (err) {
     console.error('Cleanup job error:', err);
   }
-}, 60000); // Run every 60 seconds
+}, 60000);
 
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);

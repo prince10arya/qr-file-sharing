@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import './UploadPage.css';
@@ -11,6 +11,7 @@ const UploadPage = () => {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [progress, setProgress] = useState(0);
+  const fileInputRef = useRef(null);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -43,6 +44,7 @@ const UploadPage = () => {
       setMessage(`✅ ${data.filename} uploaded successfully!`);
       setFile(null);
       setProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setTimeout(() => setMessage(''), 5000);
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.error || 'Upload failed. Please try again.'}`);
@@ -63,6 +65,7 @@ const UploadPage = () => {
 
         <form onSubmit={handleUpload} style={styles.form}>
           <input
+            ref={fileInputRef}
             type="file"
             accept="application/pdf,image/png,image/jpeg,image/jpg,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(e) => setFile(e.target.files[0])}

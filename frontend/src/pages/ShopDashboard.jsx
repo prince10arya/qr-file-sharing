@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import './ShopDashboard.css';
@@ -10,22 +10,48 @@ const ShopDashboard = () => {
   const [jobs, setJobs] = useState([]);
   const [expiresAt, setExpiresAt] = useState(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const abortControllerRef = useRef(null);
 
   const fetchJobs = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    abortControllerRef.current = new AbortController();
+    
     try {
-      const { data } = await axios.get(`${API_URL}/api/jobs/${token}`);
+      const { data } = await axios.get(`${API_URL}/api/jobs/${token}`, {
+        signal: abortControllerRef.current.signal
+      });
       setJobs(data.jobs);
       setExpiresAt(data.expiresAt);
       setError('');
+      setLoading(false);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to fetch jobs');
+      if (err.name !== 'CanceledError') {
+        setError(err.response?.data?.error || 'Failed to fetch jobs');
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     fetchJobs();
-    const interval = setInterval(fetchJobs, 5000);
-    return () => clearInterval(interval);
+    
+    // Smart polling - only when tab is visible
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchJobs();
+      }
+    }, 10000);
+    
+    return () => {
+      clearInterval(interval);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [token]);
 
   const handleDownload = (jobId, filename) => {
@@ -50,7 +76,11 @@ const ShopDashboard = () => {
         <div style={styles.jobsContainer}>
           <h2 style={styles.subtitle}>Uploaded Files ({jobs.length})</h2>
 
-          {jobs.length === 0 ? (
+          {loading ? (
+            <div style={styles.empty}>
+              <p>⏳ Loading files...</p>
+            </div>
+          ) : jobs.length === 0 ? (
             <div style={styles.empty}>
               <p>📭 No files uploaded yet</p>
               <p style={{ fontSize: '0.9rem', color: '#666' }}>
